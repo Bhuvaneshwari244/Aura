@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
@@ -7,12 +7,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+# Serve React build folder
+app = Flask(__name__, static_folder='../frontend/build', static_url_path='')
 app.url_map.strict_slashes = False
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
 
-# Configure CORS to allow all origins (for Vercel deployment)
+# Configure CORS to allow all origins
 CORS(app, resources={
     r"/*": {
         "origins": "*",
@@ -38,18 +39,23 @@ app.register_blueprint(symptoms_bp, url_prefix='/api/symptoms')
 app.register_blueprint(predictions_bp, url_prefix='/api/predictions')
 
 @app.route('/')
-def home():
-    return jsonify({
-        'message': 'Aura API - Smart Period Tracking & PCOD Risk Prediction',
-        'version': '1.0.0',
-        'status': 'running',
-        'endpoints': {
-            'auth': '/api/auth',
-            'cycles': '/api/cycles',
-            'symptoms': '/api/symptoms',
-            'predictions': '/api/predictions'
-        }
-    })
+def serve_frontend():
+    """Serve React frontend"""
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """Serve static files or React app"""
+    if path.startswith('api/'):
+        # Let API routes handle themselves
+        return jsonify({'error': 'Not found'}), 404
+    
+    # Try to serve static file
+    if os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    
+    # Otherwise serve React app (for client-side routing)
+    return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/api')
 def api_home():
